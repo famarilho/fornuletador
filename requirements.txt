@@ -3,3 +3,5 @@ pulp
 pandas
 requests
 gunicorn
+gspread
+google-auth
