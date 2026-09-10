@@ -1,3 +1,5 @@
+import os
+import json
 from flask import Flask, request, jsonify
 import pulp
 import gspread
@@ -13,7 +15,14 @@ SCOPES = [
 
 def conectar_sheets(nome_planilha="Formulacao_Suplemento"):
     try:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+        # Lê a credencial da variável de ambiente no Render (ou arquivo local como fallback)
+        json_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+        if json_env:
+            info = json.loads(json_env)
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        else:
+            creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+            
         client = gspread.authorize(creds)
         return client.open(nome_planilha)
     except Exception as e:
@@ -32,6 +41,7 @@ def resolver_otimizacao(dados):
     ndt_pasto_pct = float(dados.get("Pasto_NDT_perc", 0)) / 100.0
     ca_pasto_pct = float(dados.get("Pasto_Ca_perc", 0)) / 100.0
     p_pasto_pct = float(dados.get("Pasto_P_perc", 0)) / 100.0
+    s_pasto_pct = float(dados.get("Pasto_S_perc", 0)) / 100.0  # Adicionado S_perc
     ee_pasto_pct = float(dados.get("Pasto_EE_perc", 0)) / 100.0
 
     # Diagnóstico da Pastagem via FDN
@@ -41,6 +51,7 @@ def resolver_otimizacao(dados):
     ndt_pasto_kg = cms_pasto_kg * ndt_pasto_pct
     ca_pasto_kg = cms_pasto_kg * ca_pasto_pct
     p_pasto_kg = cms_pasto_kg * p_pasto_pct
+    s_pasto_kg = cms_pasto_kg * s_pasto_pct  # Correção: Definida a variável s_pasto_kg
     ee_pasto_kg = cms_pasto_kg * ee_pasto_pct
 
     ingredientes = dados.get("Ingredientes", [])
@@ -92,7 +103,7 @@ def resolver_otimizacao(dados):
         exig = dados.get("Exigencias", {})
         ca_supl_expr = pulp.lpSum([x[i] * cms_supl_mn * (float(ing["MS_perc"])/100.0) * (float(ing["Ca_perc"])/100.0) for i, ing in enumerate(ingredientes)])
         p_supl_expr = pulp.lpSum([x[i] * cms_supl_mn * (float(ing["MS_perc"])/100.0) * (float(ing["P_perc"])/100.0) for i, ing in enumerate(ingredientes)])
-        s_supl_expr = pulp.lpSum([x[i] * cms_supl_mn * (float(ing["MS_perc"])/100.0) * (float(ing["S_perc"])/100.0) for i, ing in enumerate(ingredientes)])
+        s_supl_expr = pulp.lpSum([x[i] * cms_supl_mn * (float(ing["MS_perc"])/100.0) * (float(ing.get("S_perc", 0))/100.0) for i, ing in enumerate(ingredientes)])
         pb_supl_expr = pulp.lpSum([x[i] * cms_supl_mn * (float(ing["MS_perc"])/100.0) * (float(ing["PB_perc"])/100.0) for i, ing in enumerate(ingredientes)])
 
         if exig.get("CaP_min") and float(exig["CaP_min"]) > 0:
